@@ -116,6 +116,27 @@ CREATE TABLE IF NOT EXISTS case_dispositions (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS triage_queues (
+    queue_key TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    owner_role TEXT NOT NULL,
+    handles TEXT NOT NULL
+);
+
+INSERT INTO triage_queues VALUES
+('physician_review', 'Safety physician review', 'safety_physician', 'Cases a clinician must decide before anything else happens to them.'),
+('regulatory_reporting', 'Regulatory reporting', 'regulatory_operations', 'Assessed cases whose reporting obligation is running.'),
+('site_followup', 'Site follow-up', 'site_operations', 'Cases waiting on evidence the site still owes.'),
+('unclassified_review', 'Unclassified intake', 'intake_triage', 'Reports intake could not assess from what arrived.')
+ON CONFLICT (queue_key) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS queue_assignments (
+    case_id TEXT PRIMARY KEY REFERENCES safety_events(case_id),
+    queue_key TEXT NOT NULL REFERENCES triage_queues(queue_key),
+    reason TEXT NOT NULL,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS audit_events (
     event_id UUID PRIMARY KEY,
     run_id UUID NOT NULL,

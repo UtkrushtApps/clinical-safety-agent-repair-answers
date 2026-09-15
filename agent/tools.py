@@ -33,6 +33,7 @@ class ClinicalTools:
             "register_intake_case": self.register_intake_case,
             "create_site_follow_up": self.create_site_follow_up,
             "compute_reporting_clock": self.compute_reporting_clock,
+            "classify_seriousness": self.classify_seriousness,
         }
 
     def _query(self, sql: str, values: tuple[Any, ...]) -> list[dict[str, Any]]:
@@ -91,6 +92,78 @@ class ClinicalTools:
             "SELECT * FROM safety_events WHERE study_id=%s AND subject_id=%s ORDER BY received_at DESC LIMIT 50",
             (study_id, subject_id),
         )
+
+    SERIOUSNESS_CATEGORIES = {
+        "hospitalization": ("hospital", "admission", "admitted", "overnight", "emergency department", "emergency room", "inpatient"),
+        "life_threatening": ("life-threatening", "life threatening", "fatal", "death", "died"),
+        "medically_important": ("medically important", "intervention", "disability", "congenital", "persistent"),
+    }
+    UNSETTLED_TERMS = (
+        "not yet", "not available", "unavailable", "not confirmed", "unclear",
+        "rather than", "while the site", "low confidence", "no event term",
+        "unverified", "not sure", "pending", "outstanding",
+    )
+
+    def classify_seriousness(
+        self,
+        study_id: str,
+        narrative: str,
+        subject_id: str | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        """Seriousness for the study's own criteria, with the evidence behind it."""
+        protocol = self.get_protocol(study_id) or {}
+        criteria = str(protocol.get("reporting_notes", ""))
+        text = (narrative or "").lower()
+        categories = sorted(
+            name
+            for name, terms in self.SERIOUSNESS_CATEGORIES.items()
+            if any(term in text for term in terms)
+        )
+        unsettled = [term for term in self.UNSETTLED_TERMS if term in text]
+        prior = self.find_prior_events(study_id, subject_id) if subject_id else []
+        if not text.strip() or (unsettled and not categories):
+            seriousness = "uncertain"
+        elif categories and unsettled:
+            seriousness = "uncertain"
+        elif categories:
+            seriousness = "serious"
+        else:
+            seriousness = "non_serious"
+        return {
+            "study_id": study_id,
+            "seriousness": seriousness,
+            "categories": categories,
+            "unsettled_evidence": unsettled,
+            "prior_event_count": len(prior),
+            "criteria_source": criteria[:400] or "protocol notes unavailable",
+            "protocol_version": protocol.get("protocol_version"),
+        }
+
+    def route_to_queue(self, case_id: str, queue_key: str, reason: str) -> dict[str, Any]:
+        """Place a case on one triage queue, once."""
+        with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO queue_assignments (case_id, queue_key, reason)
+                    VALUES (%s,%s,%s)
+                    ON CONFLICT (case_id) DO NOTHING
+                    RETURNING queue_key, reason
+                    """,
+                    (case_id, queue_key, reason[:500]),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return {**dict(row), "created": True}
+                cursor.execute(
+                    "SELECT queue_key, reason FROM queue_assignments WHERE case_id=%s",
+                    (case_id,),
+                )
+                existing = cursor.fetchone()
+                if not existing:
+                    raise RuntimeError("queue assignment lookup failed")
+                return {**dict(existing), "created": False}
 
     URGENT_TERMS = ("fatal", "death", "died", "life-threatening", "life threatening")
 

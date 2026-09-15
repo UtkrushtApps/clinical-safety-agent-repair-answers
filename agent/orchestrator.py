@@ -219,6 +219,22 @@ class ClinicalAgentGraph:
             "model_assessment": model_assessment,
             "specialist_evidence": evidence_package,
         }
+        if human_review_required:
+            queue_key = "physician_review"
+            queue_reason = "Serious or uncertain assessment needs a physician decision."
+        elif final_parse_failed or not model_assessment:
+            queue_key = "unclassified_review"
+            queue_reason = "Intake could not assess the report from what arrived."
+        elif follow_up:
+            queue_key = "site_followup"
+            queue_reason = "Assessment is waiting on evidence the site still owes."
+        else:
+            queue_key = "regulatory_reporting"
+            queue_reason = "Assessed case with a running reporting obligation."
+        queue = self.tools.route_to_queue(state.case_id, queue_key, queue_reason)
+        state.final_result["queue"] = queue
+        self.audit.record(state.run_id, "clinical_supervisor", "case_routed", queue)
+
         self.tools.save_disposition(
             state.case_id,
             state.run_id,
@@ -242,6 +258,7 @@ class ClinicalAgentGraph:
                 "evidence_quality": evidence_quality,
                 "tool_failures": tool_failures,
                 "selected_agents": state.selected_agents,
+                "queue": queue.get("queue_key"),
             },
         )
         return state

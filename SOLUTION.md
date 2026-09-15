@@ -30,5 +30,11 @@
 
 15. Make sure a report the specialists cannot classify (the partner-feed item) still ends in a bounded run and lands with a physician, with the uncertainty recorded.
 
-16. Run `./run.sh`, then execute a fixture with `python3 -m agent fixtures/portal_syncope.json`. Re-run the same fixture and verify the case and follow-up IDs are reused and the disposition remains awaiting physician review until a valid human physician review is completed.
+16. Classify seriousness against the study's own criteria in `protocols.reporting_notes`, not a fixed word list: hospitalisation, life-threatening and medically-important categories all count, and a narrative whose source records are still unsettled returns `uncertain` rather than a confident label.
+
+17. Route every finished run onto exactly one queue (`queue_assignments`, unique per case): a physician queue when a human must decide, the unclassified queue when intake could not assess the report, the site queue when evidence is outstanding, and the regulatory queue otherwise. A replayed report reuses its existing assignment.
+
+18. Keep the decision reproducible: derive it from the deterministic safety gate and the tools, not from whatever prose the model returned, so replaying one report reaches the same disposition and writes the same sequence of audit events under the run's own id.
+
+19. Run `./run.sh`, then execute a fixture with `python3 -m agent fixtures/portal_syncope.json`. Re-run the same fixture and verify the case and follow-up IDs are reused and the disposition remains awaiting physician review until a valid human physician review is completed.
 
