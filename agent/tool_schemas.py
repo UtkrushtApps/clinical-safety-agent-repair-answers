@@ -68,6 +68,22 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 ["study_id", "site_id", "subject_id", "source_report_id", "reason"],
             ),
         },
+    },    {
+        "type": "function",
+        "function": {
+            "name": "compute_reporting_clock",
+            "description": "Work out the regulatory reporting deadline for a report.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "study_id": {"type": "string"},
+                    "received_at": {"type": "string"},
+                    "seriousness_text": {"type": "string"},
+                },
+                "required": ["study_id", "received_at"],
+                "additionalProperties": False,
+            },
+        },
     },
 ]
 
@@ -75,4 +91,6 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
 def schemas_for_agent(agent_name: str) -> list[dict[str, Any]]:
     if agent_name == "site_operations":
         return [TOOL_SCHEMAS[1], TOOL_SCHEMAS[3]]
+    if agent_name == "safety":
+        return TOOL_SCHEMAS[:3] + [TOOL_SCHEMAS[4]]
     return TOOL_SCHEMAS[:3]

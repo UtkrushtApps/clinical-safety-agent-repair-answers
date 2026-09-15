@@ -24,5 +24,11 @@
 
 12. Configure the real OpenAI-compatible client exclusively from `.env`, including provider key, base URL, and model name, while adding request timeouts, limited retries, and output-token bounds.
 
-13. Run `./run.sh`, then execute a fixture with `python3 -m agent fixtures/portal_syncope.json`. Re-run the same fixture and verify the case and follow-up IDs are reused and the disposition remains awaiting physician review until a valid human physician review is completed.
+13. Treat a tool that exceeds its timeout as a failed tool, never as an empty result: raise, let the dispatcher record the failure, and let the safety gate turn it into uncertainty and physician review.
+
+14. Compute the reporting deadline from the study's own rule (day 0 = receipt, 7 calendar days for fatal or life-threatening, 15 otherwise) and keep the received timestamp timezone-aware.
+
+15. Make sure a report the specialists cannot classify (the partner-feed item) still ends in a bounded run and lands with a physician, with the uncertainty recorded.
+
+16. Run `./run.sh`, then execute a fixture with `python3 -m agent fixtures/portal_syncope.json`. Re-run the same fixture and verify the case and follow-up IDs are reused and the disposition remains awaiting physician review until a valid human physician review is completed.
 

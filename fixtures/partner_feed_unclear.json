@@ -1,0 +1,9 @@
+{
+  "report_id": "FEED-20419",
+  "study_id": "VIG-204",
+  "site_id": "US-014",
+  "subject_id": "204-014-0087",
+  "received_at": "2025-06-06T14:42:00Z",
+  "channel": "partner_feed",
+  "narrative": "Partner feed item (auto-transcribed, low confidence): 'pt ... after visit ... not sure if ER or clinic ... call dropped'. No event term captured. Caller identity not verified. Feed retry expected."
+}

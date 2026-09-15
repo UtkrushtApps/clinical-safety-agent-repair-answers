@@ -138,8 +138,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS follow_up_work_dedupe_idx
     ON follow_up_work (dedupe_key);
 
 INSERT INTO protocols VALUES
-('VIG-204', 'Vigilanib in refractory inflammatory disease', 'III', 'safety@trial.example', 'Hospitalization, life-threatening events, and medically important events require prompt safety review. Follow the current protocol and safety plan.', '6.2', '2025-01-15T00:00:00Z'),
-('ONC-117', 'Oral Noverimab combination study', 'II', 'onc-safety@trial.example', 'Assess causality and seriousness using source records. Escalate incomplete medically important reports for review.', '4.0', '2025-02-01T00:00:00Z')
+('VIG-204', 'Vigilanib in refractory inflammatory disease', 'III', 'safety@trial.example', 'Hospitalization, life-threatening events, and medically important events require prompt safety review. Follow the current protocol and safety plan. Regulatory clock: day 0 is the day the report is received; fatal or life-threatening events are due within 7 calendar days, all other serious events within 15 calendar days.', '6.2', '2025-01-15T00:00:00Z'),
+('ONC-117', 'Oral Noverimab combination study', 'II', 'onc-safety@trial.example', 'Assess causality and seriousness using source records. Escalate incomplete medically important reports for review. Regulatory clock: day 0 is the day the site first becomes aware; serious events are due within 15 calendar days, fatal or life-threatening within 7.', '4.0', '2025-02-01T00:00:00Z')
 ON CONFLICT (study_id) DO NOTHING;
 
 INSERT INTO trial_subjects VALUES

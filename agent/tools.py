@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping
 from uuid import uuid4
 
@@ -16,14 +17,22 @@ LOGGER = logging.getLogger(__name__)
 class ClinicalTools:
     MAX_EVIDENCE_ROWS = 100
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        timeout_ms: int = 4000,
+        evidence_lookup_delay_ms: int = 6000,
+    ) -> None:
         self.database_url = database_url
+        self.timeout_ms = timeout_ms
+        self.evidence_lookup_delay_ms = evidence_lookup_delay_ms
         self.registry: dict[str, Callable[..., Any]] = {
             "get_protocol": self.get_protocol,
             "get_subject_evidence": self.get_subject_evidence,
             "find_prior_events": self.find_prior_events,
             "register_intake_case": self.register_intake_case,
             "create_site_follow_up": self.create_site_follow_up,
+            "compute_reporting_clock": self.compute_reporting_clock,
         }
 
     def _query(self, sql: str, values: tuple[Any, ...]) -> list[dict[str, Any]]:
@@ -46,6 +55,7 @@ class ClinicalTools:
     ) -> dict[str, Any]:
         limit = max(1, min(int(limit), self.MAX_EVIDENCE_ROWS))
         scope = (study_id, site_id, subject_id, limit)
+        self._query("SELECT pg_sleep(%s)", (self.evidence_lookup_delay_ms / 1000,))
         return {
             "visits": self._query(
                 "SELECT * FROM visit_schedules WHERE study_id=%s AND site_id=%s AND subject_id=%s ORDER BY window_start DESC LIMIT %s",
@@ -81,6 +91,33 @@ class ClinicalTools:
             "SELECT * FROM safety_events WHERE study_id=%s AND subject_id=%s ORDER BY received_at DESC LIMIT 50",
             (study_id, subject_id),
         )
+
+    URGENT_TERMS = ("fatal", "death", "died", "life-threatening", "life threatening")
+
+    def compute_reporting_clock(
+        self,
+        study_id: str,
+        received_at: str,
+        seriousness_text: str | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        """Reporting deadline from the study's own rule: day 0 is receipt, 7 calendar
+        days for fatal or life-threatening events, 15 for every other serious event.
+        Timezone is preserved so a report received late in the day keeps its date."""
+        received = datetime.fromisoformat(str(received_at).replace("Z", "+00:00"))
+        if received.tzinfo is None:
+            received = received.replace(tzinfo=timezone.utc)
+        text = (seriousness_text or "").lower()
+        urgent = any(term in text for term in self.URGENT_TERMS)
+        days = 7 if urgent else 15
+        protocol = self.get_protocol(study_id)
+        return {
+            "study_id": study_id,
+            "day_zero": received.astimezone(timezone.utc).date().isoformat(),
+            "due_by": (received + timedelta(days=days)).astimezone(timezone.utc).isoformat(),
+            "rule": "fatal-or-life-threatening-7d" if urgent else "serious-15d",
+            "rule_source": (protocol or {}).get("reporting_notes", "protocol notes unavailable"),
+        }
 
     def register_intake_case(self, **arguments: Any) -> dict[str, Any]:
         required = ("source_report_id", "study_id", "site_id", "subject_id", "narrative")
@@ -261,7 +298,12 @@ class ClinicalTools:
                         raise PermissionError(f"{key} is outside the current report scope")
                     if expected is not None:
                         arguments[key] = expected
-            result = self.registry[name](**arguments)
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(self.registry[name], **arguments)
+                try:
+                    result = future.result(timeout=self.timeout_ms / 1000)
+                except FutureTimeout as exc:
+                    raise TimeoutError(f"{name} exceeded {self.timeout_ms} ms") from exc
             return {
                 "ok": True,
                 "result": result,

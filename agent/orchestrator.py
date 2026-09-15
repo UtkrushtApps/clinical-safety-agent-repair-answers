@@ -20,6 +20,7 @@ SERIOUS_MARKERS = (
 UNCERTAIN_MARKERS = (
     "uncertain", "unsure", "not confirmed", "unavailable", "missing",
     "outstanding", "pending", "conflict", "observation", "not yet",
+    "not sure", "low confidence", "no event term", "call dropped",
 )
 
 
